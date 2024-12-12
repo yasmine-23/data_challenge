@@ -1,0 +1,84 @@
+# Charger les bibliothèques nécessaires
+library(shiny)
+library(leaflet)
+library(dplyr)
+library(plotly)
+
+# Liste des pays de l'Union Européenne
+ue_countries <- c(
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic",
+  "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", 
+  "Hungary", "Ireland", "Italy", "Latvia", "Lithuania", "Luxembourg", 
+  "Malta", "Netherlands", "Poland", "Portugal", "Romania", "Slovakia", 
+  "Slovenia", "Spain", "Sweden"
+)
+
+# Préparer les données pour l'évolution temporelle
+covid_data_time <- covid_data %>%
+  filter(Country_Region %in% ue_countries) %>%
+  drop_na(Last_Update, Confirmed, Deaths, Active) %>%
+  mutate(Last_Update = as.Date(Last_Update)) %>%
+  group_by(Country_Region, Last_Update) %>%
+  summarise(
+    Confirmed = sum(Confirmed, na.rm = TRUE),
+    Deaths = sum(Deaths, na.rm = TRUE),
+    Active = sum(Active, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Interface utilisateur (UI)
+ui <- fluidPage(
+  titlePanel("Évolution temporelle des cas COVID-19 dans l'Union Européenne"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      selectInput(
+        "country", 
+        "Choisir un pays :", 
+        choices = unique(covid_data_time$Country_Region),
+        selected = "France"
+      ),
+      selectInput(
+        "indicator", 
+        "Choisir un indicateur :", 
+        choices = c(
+          "Cas confirmés" = "Confirmed",
+          "Décès" = "Deaths",
+          "Cas actifs" = "Active"
+        ),
+        selected = "Confirmed"
+      ),
+      helpText("Sélectionnez un pays et un indicateur pour afficher son évolution dans le temps.")
+    ),
+    
+    mainPanel(
+      plotlyOutput("time_plot", height = "600px")
+    )
+  )
+)
+
+# Serveur
+server <- function(input, output, session) {
+  output$time_plot <- renderPlotly({
+    country_data <- covid_data_time %>%
+      filter(Country_Region == input$country)
+    
+    plot_ly(
+      data = country_data,
+      x = ~Last_Update,
+      y = ~get(input$indicator),
+      type = 'scatter',
+      mode = 'lines+markers',
+      line = list(color = 'blue'),
+      marker = list(size = 6, color = 'red')
+    ) %>%
+      layout(
+        title = paste("Évolution des", input$indicator, "pour", input$country),
+        xaxis = list(title = "Date"),
+        yaxis = list(title = input$indicator)
+      )
+  })
+}
+
+# Lancer l'application Shiny
+shinyApp(ui = ui, server = server)
